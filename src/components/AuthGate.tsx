@@ -1,0 +1,108 @@
+import { useState, type FormEvent, type ReactNode } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { useUser } from '../hooks/useUser';
+
+interface AuthGateProps {
+  children: ReactNode;
+}
+
+export function AuthGate({ children }: AuthGateProps) {
+  const { currentUser, loading, error } = useUser();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSignIn = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!email || !password) {
+      setAuthError('Email and password are required');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setAuthError(null);
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setAuthError(signInError.message);
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Failed to sign in');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Connecting...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sign in to Personal OKRs</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              Use your Supabase email and password to continue
+            </p>
+            {error && (
+              <p className="mt-2 text-sm text-red-600">{error}</p>
+            )}
+          </div>
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="email">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="password">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </div>
+            {authError && <p className="text-sm text-red-600">{authError}</p>}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-white font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}

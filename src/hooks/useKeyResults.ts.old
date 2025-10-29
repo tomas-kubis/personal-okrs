@@ -1,0 +1,244 @@
+import { useState, useEffect, useCallback } from 'react';
+import type { KeyResult, WeeklyProgress, EditLog } from '../types';
+import { keyResultsCRUD, objectivesCRUD } from '../services/storage';
+import { calculateAutomaticStatus } from '../utils/statusCalculation';
+
+export function useKeyResults(objectiveId?: string) {
+  const [keyResults, setKeyResults] = useState<KeyResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load key results from storage
+  const loadKeyResults = useCallback(() => {
+    try {
+      setLoading(true);
+      const data = objectiveId
+        ? keyResultsCRUD.getByObjectiveId(objectiveId)
+        : keyResultsCRUD.getAll();
+
+      // Update automatic statuses for all key results
+      const updatedData = data.map(kr => {
+        const objective = objectivesCRUD.getById(kr.objectiveId);
+        if (objective) {
+          const automaticStatus = calculateAutomaticStatus(kr, objective.quarter);
+          return { ...kr, status: automaticStatus };
+        }
+        return kr;
+      });
+
+      setKeyResults(updatedData);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load key results');
+      console.error('Error loading key results:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [objectiveId]);
+
+  // Load on mount and when objectiveId changes
+  useEffect(() => {
+    loadKeyResults();
+  }, [loadKeyResults]);
+
+  // Create a new key result
+  const createKeyResult = useCallback((
+    keyResult: Omit<KeyResult, 'id' | 'weeklyProgress' | 'editHistory' | 'status'>
+  ): string => {
+    try {
+      const objective = objectivesCRUD.getById(keyResult.objectiveId);
+      if (!objective) {
+        throw new Error('Objective not found');
+      }
+
+      const newKeyResult: KeyResult = {
+        ...keyResult,
+        id: `kr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        weeklyProgress: [],
+        editHistory: [],
+        status: 'on-track', // Initial status
+      };
+
+      // Calculate automatic status
+      const automaticStatus = calculateAutomaticStatus(newKeyResult, objective.quarter);
+      const withStatus = { ...newKeyResult, status: automaticStatus };
+
+      keyResultsCRUD.create(withStatus);
+      setKeyResults(prev => [...prev, withStatus]);
+      setError(null);
+      return withStatus.id;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create key result';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Update a key result
+  const updateKeyResult = useCallback((
+    id: string,
+    updates: Partial<Omit<KeyResult, 'id' | 'objectiveId' | 'weeklyProgress' | 'editHistory' | 'status'>>,
+    reason?: string
+  ): void => {
+    try {
+      const existing = keyResultsCRUD.getById(id);
+      if (!existing) {
+        throw new Error('Key result not found');
+      }
+
+      const objective = objectivesCRUD.getById(existing.objectiveId);
+      if (!objective) {
+        throw new Error('Objective not found');
+      }
+
+      // Create edit history entries for changed fields
+      const editLogs: EditLog[] = [];
+      Object.keys(updates).forEach(key => {
+        const field = key as keyof typeof updates;
+        const oldValue = existing[field];
+        const newValue = updates[field];
+
+        if (oldValue !== newValue && newValue !== undefined) {
+          editLogs.push({
+            timestamp: new Date().toISOString(),
+            field,
+            previousValue: typeof oldValue === 'object' ? JSON.stringify(oldValue) : String(oldValue),
+            newValue: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue),
+            reason,
+          });
+        }
+      });
+
+      const updatedKeyResult = {
+        ...existing,
+        ...updates,
+        editHistory: [...existing.editHistory, ...editLogs],
+      };
+
+      // Recalculate automatic status after update
+      const automaticStatus = calculateAutomaticStatus(updatedKeyResult, objective.quarter);
+      const withStatus = { ...updatedKeyResult, status: automaticStatus };
+
+      keyResultsCRUD.update(id, withStatus);
+      setKeyResults(prev =>
+        prev.map(kr => (kr.id === id ? withStatus : kr))
+      );
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update key result';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Add weekly progress
+  const addWeeklyProgress = useCallback((
+    keyResultId: string,
+    progress: Omit<WeeklyProgress, 'recordedAt'>
+  ): void => {
+    try {
+      const existing = keyResultsCRUD.getById(keyResultId);
+      if (!existing) {
+        throw new Error('Key result not found');
+      }
+
+      const objective = objectivesCRUD.getById(existing.objectiveId);
+      if (!objective) {
+        throw new Error('Objective not found');
+      }
+
+      const newProgress: WeeklyProgress = {
+        ...progress,
+        recordedAt: new Date().toISOString(),
+      };
+
+      // Check if progress for this week already exists
+      const existingProgressIndex = existing.weeklyProgress.findIndex(
+        wp => wp.weekStartDate === newProgress.weekStartDate
+      );
+
+      let updatedWeeklyProgress: WeeklyProgress[];
+      if (existingProgressIndex >= 0) {
+        // Update existing week's progress
+        updatedWeeklyProgress = [...existing.weeklyProgress];
+        updatedWeeklyProgress[existingProgressIndex] = newProgress;
+      } else {
+        // Add new week's progress
+        updatedWeeklyProgress = [...existing.weeklyProgress, newProgress];
+      }
+
+      const updatedKeyResult = {
+        ...existing,
+        weeklyProgress: updatedWeeklyProgress,
+      };
+
+      // Recalculate automatic status after adding progress
+      const automaticStatus = calculateAutomaticStatus(updatedKeyResult, objective.quarter);
+      const withStatus = { ...updatedKeyResult, status: automaticStatus };
+
+      keyResultsCRUD.update(keyResultId, withStatus);
+      setKeyResults(prev =>
+        prev.map(kr => (kr.id === keyResultId ? withStatus : kr))
+      );
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add weekly progress';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Delete a key result
+  const deleteKeyResult = useCallback((id: string): void => {
+    try {
+      keyResultsCRUD.delete(id);
+      setKeyResults(prev => prev.filter(kr => kr.id !== id));
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete key result';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Refresh all statuses (useful after time has passed)
+  const refreshStatuses = useCallback((): void => {
+    try {
+      const updatedKeyResults = keyResults.map(kr => {
+        const objective = objectivesCRUD.getById(kr.objectiveId);
+        if (objective) {
+          const automaticStatus = calculateAutomaticStatus(kr, objective.quarter);
+          const withStatus = { ...kr, status: automaticStatus };
+          keyResultsCRUD.update(kr.id, withStatus);
+          return withStatus;
+        }
+        return kr;
+      });
+
+      setKeyResults(updatedKeyResults);
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to refresh statuses';
+      setError(errorMsg);
+      console.error('Error refreshing statuses:', err);
+    }
+  }, [keyResults]);
+
+  // Get key results by status
+  const getByStatus = useCallback((status: KeyResult['status']): KeyResult[] => {
+    return keyResults.filter(kr => kr.status === status);
+  }, [keyResults]);
+
+  return {
+    keyResults,
+    loading,
+    error,
+    createKeyResult,
+    updateKeyResult,
+    addWeeklyProgress,
+    deleteKeyResult,
+    refreshStatuses,
+    getByStatus,
+    reload: loadKeyResults,
+  };
+}

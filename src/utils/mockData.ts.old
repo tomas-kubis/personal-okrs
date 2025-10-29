@@ -1,0 +1,313 @@
+import { startOfWeek, subWeeks, format } from 'date-fns';
+import type { Objective, KeyResult, WeeklyCheckIn, WeeklyProgress, EditLog } from '../types';
+import {
+  objectivesCRUD,
+  keyResultsCRUD,
+  checkInsCRUD,
+  quartersCRUD,
+  getCurrentUserId,
+} from '../services/storage';
+
+/**
+ * Generate mock objectives with key results for the current user and active quarter
+ */
+export function generateMockObjectives(): void {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    console.error('No current user found');
+    return;
+  }
+
+  const activeQuarter = quartersCRUD.getActive(userId);
+  if (!activeQuarter) {
+    console.error('No active quarter found');
+    return;
+  }
+
+  const objectives: Omit<Objective, 'userId' | 'quarterId'>[] = [
+    {
+      id: 'obj_1',
+      title: 'Improve Physical Health & Fitness',
+      description: 'Focus on building sustainable healthy habits through regular exercise and better nutrition',
+      quarter: activeQuarter.name,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      archived: false,
+      editHistory: [{
+        action: 'create',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        field: 'objective',
+        previousValue: '',
+        newValue: 'Improve Physical Health & Fitness',
+      }] as EditLog[],
+    },
+    {
+      id: 'obj_2',
+      title: 'Advance Career Skills',
+      description: 'Develop technical and leadership skills to prepare for next career level',
+      quarter: currentQuarter,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      archived: false,
+      editHistory: [],
+    },
+    {
+      id: 'obj_3',
+      title: 'Build Financial Security',
+      description: 'Strengthen financial foundation through savings and smart investments',
+      quarter: currentQuarter,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      archived: false,
+      editHistory: [],
+    },
+  ];
+
+  const keyResults: KeyResult[] = [
+    // Objective 1: Health & Fitness
+    {
+      id: 'kr_1',
+      objectiveId: 'obj_1',
+      description: 'Work out at least 3 times per week',
+      targetValue: 36, // 12 weeks * 3 workouts
+      unit: 'workouts',
+      monthlyTargets: {
+        month1: 12,
+        month2: 24,
+        month3: 36,
+      },
+      weeklyProgress: generateWeeklyProgress(10, 3), // 10 weeks of progress
+      editHistory: [],
+      status: 'on-track',
+    },
+    {
+      id: 'kr_2',
+      objectiveId: 'obj_1',
+      description: 'Reduce body weight',
+      targetValue: 10, // 10 kg
+      unit: 'kg lost',
+      monthlyTargets: {
+        month1: 3,
+        month2: 6,
+        month3: 10,
+      },
+      weeklyProgress: generateWeeklyProgress(10, 0.8), // Slightly behind
+      editHistory: [],
+      status: 'needs-attention',
+    },
+    {
+      id: 'kr_3',
+      objectiveId: 'obj_1',
+      description: 'Meal prep healthy lunches',
+      targetValue: 60, // 5 days/week * 12 weeks
+      unit: 'meals',
+      monthlyTargets: {
+        month1: 20,
+        month2: 40,
+        month3: 60,
+      },
+      weeklyProgress: generateWeeklyProgress(10, 4), // Behind pace
+      editHistory: [],
+      status: 'behind',
+    },
+    // Objective 2: Career Skills
+    {
+      id: 'kr_4',
+      objectiveId: 'obj_2',
+      description: 'Complete online courses',
+      targetValue: 3,
+      unit: 'courses',
+      monthlyTargets: {
+        month1: 1,
+        month2: 2,
+        month3: 3,
+      },
+      weeklyProgress: generateProgressByWeek([
+        { week: 0, value: 0 },
+        { week: 4, value: 1 },
+        { week: 8, value: 1.5 },
+        { week: 10, value: 2 },
+      ]),
+      editHistory: [],
+      status: 'on-track',
+    },
+    {
+      id: 'kr_5',
+      objectiveId: 'obj_2',
+      description: 'Lead team meetings',
+      targetValue: 12,
+      unit: 'meetings',
+      monthlyTargets: {
+        month1: 4,
+        month2: 8,
+        month3: 12,
+      },
+      weeklyProgress: generateWeeklyProgress(10, 1.2), // Ahead of pace
+      editHistory: [],
+      status: 'on-track',
+    },
+    // Objective 3: Financial Security
+    {
+      id: 'kr_6',
+      objectiveId: 'obj_3',
+      description: 'Build emergency fund',
+      targetValue: 10000,
+      unit: 'USD',
+      monthlyTargets: {
+        month1: 3000,
+        month2: 6500,
+        month3: 10000,
+      },
+      weeklyProgress: generateProgressByWeek([
+        { week: 0, value: 0 },
+        { week: 4, value: 2800 },
+        { week: 8, value: 6000 },
+        { week: 10, value: 7200 },
+      ]),
+      editHistory: [],
+      status: 'on-track',
+    },
+    {
+      id: 'kr_7',
+      objectiveId: 'obj_3',
+      description: 'Reduce monthly expenses',
+      targetValue: 500,
+      unit: 'USD saved',
+      monthlyTargets: {
+        month1: 150,
+        month2: 325,
+        month3: 500,
+      },
+      weeklyProgress: generateProgressByWeek([
+        { week: 0, value: 0 },
+        { week: 4, value: 120 },
+        { week: 8, value: 280 },
+        { week: 10, value: 350 },
+      ]),
+      editHistory: [],
+      status: 'needs-attention',
+    },
+  ];
+
+  // Save to storage
+  objectives.forEach(obj => objectivesCRUD.create(obj));
+  keyResults.forEach(kr => keyResultsCRUD.create(kr));
+
+  console.log('Mock objectives and key results created successfully');
+}
+
+/**
+ * Generate weekly progress with consistent increments
+ */
+function generateWeeklyProgress(weeks: number, incrementPerWeek: number): WeeklyProgress[] {
+  const progress: WeeklyProgress[] = [];
+  const now = new Date();
+
+  for (let i = 0; i < weeks; i++) {
+    const weekStart = startOfWeek(subWeeks(now, weeks - i - 1), { weekStartsOn: 1 });
+    progress.push({
+      weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+      value: (i + 1) * incrementPerWeek,
+      recordedAt: new Date(weekStart.getTime() + 24 * 60 * 60 * 1000).toISOString(), // Next day
+    });
+  }
+
+  return progress;
+}
+
+/**
+ * Generate progress for specific weeks
+ */
+function generateProgressByWeek(data: Array<{ week: number; value: number }>): WeeklyProgress[] {
+  const progress: WeeklyProgress[] = [];
+  const now = new Date();
+
+  data.forEach(({ week, value }) => {
+    const weekStart = startOfWeek(subWeeks(now, 10 - week), { weekStartsOn: 1 });
+    progress.push({
+      weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+      value,
+      recordedAt: new Date(weekStart.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+  });
+
+  return progress;
+}
+
+/**
+ * Generate mock check-ins with AAR reflections
+ */
+export function generateMockCheckIns(): void {
+  const checkIns: WeeklyCheckIn[] = [
+    {
+      id: 'ci_1',
+      weekStartDate: format(startOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      progressUpdates: [
+        { keyResultId: 'kr_1', value: 24, notes: 'Hit all 3 workouts this week' },
+        { keyResultId: 'kr_2', value: 6.5, notes: 'Good progress on weight loss' },
+        { keyResultId: 'kr_4', value: 1.5, notes: 'Halfway through second course' },
+      ],
+      reflection: {
+        whatWentWell: 'Maintained consistent workout schedule. Made time for studying by waking up 30 minutes earlier.',
+        whatDidntGoWell: 'Struggled with meal prep on Sunday - ran out of time. Only prepped 3 meals instead of 5.',
+        whatWillIChange: 'Will prep meals on Saturday evening instead of Sunday. Also going to try batch cooking to save time.',
+        completedAt: format(subWeeks(new Date(), 2), 'yyyy-MM-dd') + 'T18:00:00.000Z',
+      },
+      createdAt: format(subWeeks(new Date(), 2), 'yyyy-MM-dd') + 'T09:00:00.000Z',
+      completedAt: format(subWeeks(new Date(), 2), 'yyyy-MM-dd') + 'T18:00:00.000Z',
+    },
+    {
+      id: 'ci_2',
+      weekStartDate: format(startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      progressUpdates: [
+        { keyResultId: 'kr_1', value: 27, notes: 'Another solid week' },
+        { keyResultId: 'kr_2', value: 7.2, notes: 'Slight plateau this week' },
+        { keyResultId: 'kr_5', value: 10, notes: 'Led 2 productive meetings' },
+      ],
+      reflection: {
+        whatWentWell: 'Saturday meal prep worked great! Got all 5 meals done in 2 hours. Team meetings went smoothly - received positive feedback.',
+        whatDidntGoWell: 'Weight loss plateaued this week. Probably ate out too much on the weekend.',
+        whatWillIChange: 'Will track calories more carefully and limit eating out to once per weekend. Also planning to add one extra cardio session.',
+        completedAt: format(subWeeks(new Date(), 1), 'yyyy-MM-dd') + 'T19:30:00.000Z',
+      },
+      createdAt: format(subWeeks(new Date(), 1), 'yyyy-MM-dd') + 'T09:00:00.000Z',
+      completedAt: format(subWeeks(new Date(), 1), 'yyyy-MM-dd') + 'T19:30:00.000Z',
+    },
+    {
+      id: 'ci_3',
+      weekStartDate: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      progressUpdates: [
+        { keyResultId: 'kr_1', value: 30, notes: 'On track for this week' },
+        { keyResultId: 'kr_6', value: 7200, notes: 'Good savings progress' },
+      ],
+      reflection: {
+        whatWentWell: 'Completed another course module. Saved more than planned this week by cooking at home.',
+        whatDidntGoWell: 'Missed one workout due to work deadline. Felt stressed about time management.',
+        whatWillIChange: 'Will block workout time on calendar like meetings - non-negotiable. Also delegating more tasks at work.',
+        completedAt: new Date().toISOString(),
+      },
+      createdAt: format(new Date(), 'yyyy-MM-dd') + 'T09:00:00.000Z',
+      completedAt: new Date().toISOString(),
+    },
+  ];
+
+  // Save to storage
+  checkIns.forEach(ci => checkInsCRUD.create(ci));
+
+  console.log('Mock check-ins created successfully');
+}
+
+/**
+ * Initialize all mock data
+ */
+export function initializeMockData(): void {
+  console.log('Initializing mock data...');
+  generateMockObjectives();
+  generateMockCheckIns();
+  console.log('Mock data initialization complete');
+}
+
+/**
+ * Check if mock data exists
+ */
+export function hasMockData(): boolean {
+  const objectives = objectivesCRUD.getAll();
+  return objectives.length > 0;
+}

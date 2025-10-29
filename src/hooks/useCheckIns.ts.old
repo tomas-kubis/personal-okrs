@@ -1,0 +1,204 @@
+import { useState, useEffect, useCallback } from 'react';
+import { startOfWeek, format } from 'date-fns';
+import type { WeeklyCheckIn, ProgressUpdate, Reflection, CoachingSession } from '../types';
+import { checkInsCRUD } from '../services/storage';
+
+export function useCheckIns() {
+  const [checkIns, setCheckIns] = useState<WeeklyCheckIn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load check-ins from storage
+  const loadCheckIns = useCallback(() => {
+    try {
+      setLoading(true);
+      const data = checkInsCRUD.getAll();
+      // Sort by week start date (newest first)
+      const sorted = data.sort((a, b) =>
+        new Date(b.weekStartDate).getTime() - new Date(a.weekStartDate).getTime()
+      );
+      setCheckIns(sorted);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load check-ins');
+      console.error('Error loading check-ins:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load on mount
+  useEffect(() => {
+    loadCheckIns();
+  }, [loadCheckIns]);
+
+  // Get week start date (Monday) for a given date
+  const getWeekStartDate = useCallback((date: Date = new Date()): string => {
+    const monday = startOfWeek(date, { weekStartsOn: 1 });
+    return format(monday, 'yyyy-MM-dd');
+  }, []);
+
+  // Get current week's check-in
+  const getCurrentWeekCheckIn = useCallback((): WeeklyCheckIn | undefined => {
+    const currentWeekStart = getWeekStartDate();
+    return checkIns.find(ci => ci.weekStartDate === currentWeekStart);
+  }, [checkIns, getWeekStartDate]);
+
+  // Create a new check-in
+  const createCheckIn = useCallback((
+    checkIn: Omit<WeeklyCheckIn, 'id' | 'createdAt' | 'completedAt'>
+  ): string => {
+    try {
+      const newCheckIn: WeeklyCheckIn = {
+        ...checkIn,
+        id: `ci_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      };
+
+      checkInsCRUD.create(newCheckIn);
+      setCheckIns(prev => [newCheckIn, ...prev]); // Add to beginning (newest first)
+      setError(null);
+      return newCheckIn.id;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create check-in';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Update an existing check-in
+  const updateCheckIn = useCallback((
+    id: string,
+    updates: Partial<Omit<WeeklyCheckIn, 'id' | 'createdAt'>>
+  ): void => {
+    try {
+      const existing = checkInsCRUD.getById(id);
+      if (!existing) {
+        throw new Error('Check-in not found');
+      }
+
+      const updatedCheckIn = {
+        ...updates,
+        completedAt: new Date().toISOString(), // Update completion time
+      };
+
+      checkInsCRUD.update(id, updatedCheckIn);
+      setCheckIns(prev =>
+        prev.map(ci => (ci.id === id ? { ...ci, ...updatedCheckIn } : ci))
+      );
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update check-in';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Update progress for current week
+  const updateProgress = useCallback((progressUpdates: ProgressUpdate[]): void => {
+    const currentWeekStart = getWeekStartDate();
+    const existing = getCurrentWeekCheckIn();
+
+    if (existing) {
+      updateCheckIn(existing.id, { progressUpdates });
+    } else {
+      // Create new check-in if it doesn't exist
+      createCheckIn({
+        weekStartDate: currentWeekStart,
+        progressUpdates,
+        reflection: {
+          whatWentWell: '',
+          whatDidntGoWell: '',
+          whatWillIChange: '',
+          completedAt: '',
+        },
+      });
+    }
+  }, [getWeekStartDate, getCurrentWeekCheckIn, updateCheckIn, createCheckIn]);
+
+  // Update reflection for current week
+  const updateReflection = useCallback((reflection: Reflection): void => {
+    const currentWeekStart = getWeekStartDate();
+    const existing = getCurrentWeekCheckIn();
+
+    const completeReflection: Reflection = {
+      ...reflection,
+      completedAt: new Date().toISOString(),
+    };
+
+    if (existing) {
+      updateCheckIn(existing.id, { reflection: completeReflection });
+    } else {
+      // Create new check-in if it doesn't exist
+      createCheckIn({
+        weekStartDate: currentWeekStart,
+        progressUpdates: [],
+        reflection: completeReflection,
+      });
+    }
+  }, [getWeekStartDate, getCurrentWeekCheckIn, updateCheckIn, createCheckIn]);
+
+  // Update coaching session for current week
+  const updateCoachingSession = useCallback((coachingSession: CoachingSession): void => {
+    const currentWeekStart = getWeekStartDate();
+    const existing = getCurrentWeekCheckIn();
+
+    if (existing) {
+      updateCheckIn(existing.id, { coachingSession });
+    } else {
+      // Create new check-in if it doesn't exist
+      createCheckIn({
+        weekStartDate: currentWeekStart,
+        progressUpdates: [],
+        reflection: {
+          whatWentWell: '',
+          whatDidntGoWell: '',
+          whatWillIChange: '',
+          completedAt: '',
+        },
+        coachingSession,
+      });
+    }
+  }, [getWeekStartDate, getCurrentWeekCheckIn, updateCheckIn, createCheckIn]);
+
+  // Delete a check-in
+  const deleteCheckIn = useCallback((id: string): void => {
+    try {
+      checkInsCRUD.delete(id);
+      setCheckIns(prev => prev.filter(ci => ci.id !== id));
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete check-in';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }, []);
+
+  // Get check-in for a specific week
+  const getCheckInByWeek = useCallback((weekStartDate: string): WeeklyCheckIn | undefined => {
+    return checkIns.find(ci => ci.weekStartDate === weekStartDate);
+  }, [checkIns]);
+
+  // Get recent check-ins
+  const getRecentCheckIns = useCallback((count: number = 10): WeeklyCheckIn[] => {
+    return checkIns.slice(0, count);
+  }, [checkIns]);
+
+  return {
+    checkIns,
+    loading,
+    error,
+    currentWeekCheckIn: getCurrentWeekCheckIn(),
+    createCheckIn,
+    updateCheckIn,
+    updateProgress,
+    updateReflection,
+    updateCoachingSession,
+    deleteCheckIn,
+    getCheckInByWeek,
+    getRecentCheckIns,
+    getWeekStartDate,
+    reload: loadCheckIns,
+  };
+}
