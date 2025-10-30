@@ -7,10 +7,16 @@ import Coach from './pages/Coach';
 import History from './pages/History';
 import Settings from './pages/Settings';
 import { AuthGate } from './components/AuthGate';
+import { supabaseConfigError } from './lib/supabaseClient';
+import { ConfigurationError } from './components/ConfigurationError';
 
 function App() {
+  if (supabaseConfigError) {
+    return <ConfigurationError message={supabaseConfigError} />;
+  }
+
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ToastProvider>
         <AuthGate>
           <Layout>
