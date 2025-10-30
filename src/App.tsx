@@ -10,7 +10,7 @@ import { AuthGate } from './components/AuthGate';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ToastProvider>
         <AuthGate>
           <Layout>
