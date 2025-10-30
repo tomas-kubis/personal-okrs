@@ -28,6 +28,11 @@ export function ConfigurationError({ title = 'Configuration required', message, 
             The Supabase anonymous key is safe to expose in client-side code. If you are using GitHub Pages, define these values as
             repository secrets and map them to the build step in your workflow.
           </p>
+          <p>
+            Double-check that the Supabase URL matches the format <code>https://&lt;project-ref&gt;.supabase.co</code> (or
+            <code>supabase.in</code>) and that the anonymous key is copied exactly from the <strong>anon public</strong> entry in the
+            Supabase dashboard.
+          </p>
         </div>
         {children}
       </div>
