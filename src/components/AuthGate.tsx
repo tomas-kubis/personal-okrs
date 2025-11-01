@@ -94,6 +94,13 @@ export function AuthGate({ children }: AuthGateProps) {
                     )}
                   </div>
                   <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Source: {entry.source}</div>
+                  {entry.notes.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-gray-500 dark:text-gray-400">
+                      {entry.notes.map(note => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

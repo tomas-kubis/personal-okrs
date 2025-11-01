@@ -16,23 +16,71 @@ const getProcessEnv = (): Record<string, string | undefined> | undefined => {
   return processRef?.env;
 };
 
-export const normalizeEnvValue = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
+const stripMatchingQuotes = (value: string) => {
+  if (value.length < 2) {
+    return { stripped: false, value };
+  }
 
-  const lowerTrimmed = trimmed.toLowerCase();
-  return lowerTrimmed === 'undefined' || lowerTrimmed === 'null' ? undefined : trimmed;
+  const firstChar = value[0];
+  const lastChar = value[value.length - 1];
+  if (firstChar === lastChar && (firstChar === '"' || firstChar === '\'' || firstChar === '`')) {
+    return { stripped: true, value: value.slice(1, -1) };
+  }
+
+  return { stripped: false, value };
+};
+
+interface NormalizedEnvValue {
+  value?: string;
+  notes: string[];
+}
+
+export const normalizeEnvValue = (value: unknown, label = 'value'): NormalizedEnvValue => {
+  const notes: string[] = [];
+
+  if (typeof value !== 'string') {
+    return { notes };
+  }
+
+  let candidate = value.trim();
+  if (!candidate) {
+    return { notes };
+  }
+
+  const { stripped, value: unquoted } = stripMatchingQuotes(candidate);
+  if (stripped) {
+    candidate = unquoted.trim();
+    notes.push(`${label} had wrapping quotes that were removed during normalization.`);
+  }
+
+  if (!candidate) {
+    return { notes };
+  }
+
+  const lowerCandidate = candidate.toLowerCase();
+  if (lowerCandidate === 'undefined' || lowerCandidate === 'null') {
+    notes.push(`${label} resolved to the string "${candidate}", which is treated as missing.`);
+    return { notes };
+  }
+
+  if (candidate.includes('${{') || candidate.includes('${')) {
+    notes.push(
+      `${label} still contains template syntax (e.g. \${{ … }}); ensure your build workflow exposes the actual secret value.`,
+    );
+  }
+
+  return { value: candidate, notes };
 };
 
 interface EnvCandidate {
   label: string;
-  read: () => string | undefined;
+  read: () => NormalizedEnvValue;
 }
 
 interface ResolvedEnvValue {
   value?: string;
   source?: string;
+  notes: string[];
 }
 
 interface EnvDebugEntry {
@@ -41,6 +89,7 @@ interface EnvDebugEntry {
   source: string;
   maskedValue: string | null;
   sensitive: boolean;
+  notes: string[];
 }
 
 const getImportMetaEnv = () => {
@@ -65,7 +114,7 @@ const buildCandidates = (
     const readers: EnvCandidate[] = [
       {
         label: `process.env.${name}`,
-        read: () => normalizeEnvValue(processEnv?.[name]),
+        read: () => normalizeEnvValue(processEnv?.[name], `process.env.${name}`),
       },
     ];
 
@@ -74,7 +123,7 @@ const buildCandidates = (
       readers.push({
         label: `import.meta.env.${name}`,
         // Access with direct property references so Vite includes the keys in the runtime env object
-        read: () => normalizeEnvValue(readFromImportMeta(importMetaEnv)),
+        read: () => normalizeEnvValue(readFromImportMeta(importMetaEnv), `import.meta.env.${name}`),
       });
     }
 
@@ -83,14 +132,19 @@ const buildCandidates = (
 };
 
 const resolveEnv = (candidates: readonly EnvCandidate[]): ResolvedEnvValue => {
+  const notes: string[] = [];
   for (const candidate of candidates) {
-    const value = candidate.read();
-    if (value) {
-      return { value, source: candidate.label };
+    const result = candidate.read();
+    if (result.notes.length) {
+      notes.push(...result.notes);
+    }
+
+    if (result.value) {
+      return { value: result.value, source: candidate.label, notes };
     }
   }
 
-  return {};
+  return { notes };
 };
 
 const SUPABASE_URL_ENV_KEYS = ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL'] as const;
@@ -145,6 +199,7 @@ export const supabaseEnvDebugSummary: EnvDebugEntry[] = [
     source: supabaseUrlResolution.source ?? 'not resolved',
     maskedValue: maskValue(supabaseUrl ?? undefined),
     sensitive: false,
+    notes: supabaseUrlResolution.notes,
   },
   {
     label: 'Supabase anon key',
@@ -152,6 +207,7 @@ export const supabaseEnvDebugSummary: EnvDebugEntry[] = [
     source: supabaseAnonKeyResolution.source ?? 'not resolved',
     maskedValue: maskValue(supabaseAnonKey ?? undefined),
     sensitive: true,
+    notes: supabaseAnonKeyResolution.notes,
   },
 ];
 
