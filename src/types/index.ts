@@ -135,6 +135,11 @@ export interface SessionContext {
     weekStartDate: string;
     reflection?: Reflection;
   }>;
+  recentSessions?: Array<{
+    id: string;
+    startedAt: string;
+    contextSummary?: string;
+  }>;
   [key: string]: unknown;
 }
 
