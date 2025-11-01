@@ -42,7 +42,16 @@ export const normalizeEnvValue = (value: unknown, label = 'value'): NormalizedEn
     return { notes };
   }
 
+  const originalLength = value.length;
   let candidate = value.trim();
+
+  // Warn about trimmed whitespace
+  if (candidate.length !== originalLength) {
+    notes.push(
+      `${label} had ${originalLength - candidate.length} whitespace character(s) that were removed during normalization.`,
+    );
+  }
+
   if (!candidate) {
     return { notes };
   }
@@ -67,6 +76,27 @@ export const normalizeEnvValue = (value: unknown, label = 'value'): NormalizedEn
     notes.push(
       `${label} still contains template syntax (e.g. \${{ … }}); ensure your build workflow exposes the actual secret value.`,
     );
+  }
+
+  // Check for placeholder values
+  if (candidate.includes('<') || candidate.includes('>') || candidate.toLowerCase().includes('your-')) {
+    notes.push(
+      `${label} appears to contain placeholder text (e.g., <your-value>). Replace with actual values from Supabase.`,
+    );
+  }
+
+  // Check for invalid characters in JWT-like values
+  if (label.toLowerCase().includes('key') && candidate.startsWith('eyJ')) {
+    const validJwtChars = /^[A-Za-z0-9._-]+$/;
+    if (!validJwtChars.test(candidate)) {
+      const invalidChars = candidate.match(/[^A-Za-z0-9._-]/g);
+      if (invalidChars) {
+        notes.push(
+          `${label} contains invalid characters for a JWT token: ${[...new Set(invalidChars)].join(', ')}. ` +
+          `Copy the key exactly from Supabase without any extra characters.`,
+        );
+      }
+    }
   }
 
   return { value: candidate, notes };
