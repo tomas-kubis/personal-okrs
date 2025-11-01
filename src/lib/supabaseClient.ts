@@ -30,14 +30,22 @@ const resolveEnv = (keys: readonly string[]): string | undefined => {
   const importMetaEnv =
     typeof import.meta !== 'undefined' ? ((import.meta.env ?? {}) as Record<string, unknown>) : undefined;
 
+  const normalize = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed && trimmed.toLowerCase() !== 'undefined' && trimmed.toLowerCase() !== 'null'
+      ? trimmed
+      : undefined;
+  };
+
   for (const key of keys) {
-    const valueFromProcess = processEnv?.[key];
-    if (typeof valueFromProcess === 'string' && valueFromProcess.length > 0) {
+    const valueFromProcess = normalize(processEnv?.[key]);
+    if (valueFromProcess) {
       return valueFromProcess;
     }
 
-    const valueFromImportMeta = importMetaEnv?.[key];
-    if (typeof valueFromImportMeta === 'string' && valueFromImportMeta.length > 0) {
+    const valueFromImportMeta = normalize(importMetaEnv?.[key]);
+    if (valueFromImportMeta) {
       return valueFromImportMeta;
     }
   }
@@ -45,18 +53,46 @@ const resolveEnv = (keys: readonly string[]): string | undefined => {
   return undefined;
 };
 
-const supabaseUrl = resolveEnv(['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL']);
-const supabaseAnonKey = resolveEnv(['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY']);
+const SUPABASE_URL_ENV_KEYS = ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL'] as const;
+const SUPABASE_ANON_KEY_ENV_KEYS = ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY'] as const;
 
-const missingConfigMessage =
-  'Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before building the app.';
+const supabaseUrl = resolveEnv(SUPABASE_URL_ENV_KEYS);
+const supabaseAnonKey = resolveEnv(SUPABASE_ANON_KEY_ENV_KEYS);
 
-export const supabaseConfigError = !supabaseUrl || !supabaseAnonKey ? missingConfigMessage : null;
+const isValidSupabaseUrl = (url: string): boolean =>
+  /^https:\/\/[a-z0-9-]+\.supabase\.(co|in)(\/|$)/.test(url);
+
+const isLikelySupabaseAnonKey = (key: string): boolean => {
+  const parts = key.split('.');
+  return parts.length === 3 && parts.every(part => part.length > 0);
+};
+
+const configIssues: string[] = [];
+
+if (!supabaseUrl) {
+  configIssues.push(
+    `Supabase URL environment variable is missing. Provide one of: ${SUPABASE_URL_ENV_KEYS.join(', ')}.`,
+  );
+} else if (!isValidSupabaseUrl(supabaseUrl)) {
+  configIssues.push('Supabase URL must look like https://<project-ref>.supabase.co (or supabase.in).');
+}
+
+if (!supabaseAnonKey) {
+  configIssues.push(
+    `Supabase anonymous key environment variable is missing. Provide one of: ${SUPABASE_ANON_KEY_ENV_KEYS.join(', ')}.`,
+  );
+} else if (!isLikelySupabaseAnonKey(supabaseAnonKey)) {
+  configIssues.push('Supabase anonymous key must be the long "anon public" JWT copied from your Supabase project settings.');
+}
+
+export const supabaseConfigError = configIssues.length
+  ? `${configIssues.join(' ')} Configure these values before building the app.`
+  : null;
 
 const createMissingConfigClient = (): SupabaseClient<Database> =>
   new Proxy({} as SupabaseClient<Database>, {
     get() {
-      throw new Error(supabaseConfigError ?? missingConfigMessage);
+      throw new Error(supabaseConfigError ?? 'Supabase configuration is incomplete.');
     },
   });
 
