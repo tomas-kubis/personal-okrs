@@ -88,7 +88,7 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
 
     // Optimistically add user message to UI
     const tempUserMessage: CoachingMessage = {
-      id: crypto.randomUUID(),
+      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: 'user',
       content: userMessage,
       timestamp: new Date().toISOString(),
