@@ -1,13 +1,13 @@
 # Personal OKRs
 
-A Progressive Web App (PWA) for tracking and managing personal Objectives and Key Results (OKRs).
+Web App for tracking and managing personal Objectives and Key Results (OKRs).
 
 ## Features
 
-- **Dashboard**: Overview of your current OKRs and progress
-- **Check-in**: Regular progress tracking for your objectives
-- **Coach**: AI-powered coaching assistance (powered by Claude API)
-- **History**: Review past check-ins and progress over time
+- **Dashboard**: Continuous progress and status tracker for your objectives and key results 
+- **Check-in**: Weekly progress review and reflection
+- **Coach**: AI-powered performance coaching assistance - tbd
+- **History**: Information from previous periods and logging - tbd (maybe integration into settings)
 - **Settings**: Customize your experience
 
 ## Tech Stack
@@ -86,6 +86,4 @@ This app is configured as a Progressive Web App with:
 
 The app supports dark mode with class-based toggling. The theme can be controlled through the Settings page.
 
-## License
 
-MIT

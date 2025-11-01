@@ -16,6 +16,15 @@ const getProcessEnv = (): Record<string, string | undefined> | undefined => {
   return processRef?.env;
 };
 
+const normalizeEnvValue = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'undefined' || trimmed.toLowerCase() === 'null') {
+    return undefined;
+  }
+  return trimmed;
+};
+
 const resolveEnv = (keys: readonly string[]): string | undefined => {
   const processEnv = getProcessEnv();
   const importMetaEnv =
