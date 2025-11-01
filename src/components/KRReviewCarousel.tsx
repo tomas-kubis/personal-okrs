@@ -70,21 +70,15 @@ export default function KRReviewCarousel({ keyResults, currentWeek, onUpdateProg
     weekStartDate.setDate(periodStartDate.getDate() + i * 7);
     weekStartDate.setHours(0, 0, 0, 0);
 
-    // Look up entries using normalized week start dates
-    const normalizedWeekStart = weekStartDate.toISOString().split('T')[0];
-    const directEntry = weeklyProgress.find((wp: any) => {
-      const rawDate = wp.week_start_date || wp.weekStartDate;
-      if (!rawDate) return false;
-      const normalized = new Date(rawDate).toISOString().split('T')[0];
-      return normalized === normalizedWeekStart;
-    });
-
+    // Determine the value to plot for this week
     let actualValue: number | null = null;
     let weekStatus: 'on-track' | 'needs-attention' | 'behind' | null = null;
 
-    if (directEntry) {
-      actualValue = typeof directEntry.value === 'number' ? directEntry.value : 0;
-      weekStatus = directEntry.status || null;
+    const latestEntry = weekProgressMap.get(week);
+
+    if (latestEntry) {
+      actualValue = typeof latestEntry.value === 'number' ? latestEntry.value : 0;
+      weekStatus = latestEntry.status ?? null;
     } else if (week <= currentWeek) {
       // Carry forward last value strictly before this week
       let lastValue: number | null = null;
