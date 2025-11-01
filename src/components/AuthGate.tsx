@@ -1,6 +1,13 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { useState, useEffect, type FormEvent, type ReactNode } from 'react';
+import { supabase, supabaseEnvDebugSummary } from '../lib/supabaseClient';
 import { useUser } from '../hooks/useUser';
+import { ConfigurationError } from './ConfigurationError';
+
+const isInvalidApiKeyMessage = (message: string | null | undefined): boolean =>
+  typeof message === 'string' && message.toLowerCase().includes('invalid api key');
+
+const invalidApiKeyHelpText =
+  'Supabase rejected the provided anonymous key. Confirm that VITE_SUPABASE_ANON_KEY (or REACT_APP_SUPABASE_ANON_KEY) contains the exact "anon public" key from your Supabase project settings.';
 
 interface AuthGateProps {
   children: ReactNode;
@@ -12,6 +19,13 @@ export function AuthGate({ children }: AuthGateProps) {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isInvalidApiKeyMessage(error)) {
+      setConfigError(invalidApiKeyHelpText);
+    }
+  }, [error]);
 
   const handleSignIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,14 +42,66 @@ export function AuthGate({ children }: AuthGateProps) {
         password,
       });
       if (signInError) {
-        setAuthError(signInError.message);
+        const message = signInError.message;
+        if (isInvalidApiKeyMessage(message)) {
+          setConfigError(invalidApiKeyHelpText);
+        }
+        setAuthError(message);
       }
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Failed to sign in');
+      const message = err instanceof Error ? err.message : 'Failed to sign in';
+      if (isInvalidApiKeyMessage(message)) {
+        setConfigError(invalidApiKeyHelpText);
+      }
+      setAuthError(message);
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (configError) {
+    return (
+      <ConfigurationError
+        title="Supabase configuration error"
+        message={configError}
+        details={
+          <div className="text-left text-sm text-gray-600 dark:text-gray-300">
+            <p className="font-medium text-gray-700 dark:text-gray-200">Resolved configuration values:</p>
+            <ul className="mt-2 space-y-1">
+              {supabaseEnvDebugSummary.map(entry => (
+                <li
+                  key={entry.label}
+                  className="rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                >
+                  <div>{entry.label}:</div>
+                  <div className="mt-1">
+                    {entry.value ? (
+                      <>
+                        <div>
+                          {entry.sensitive
+                            ? `Preview: ${entry.maskedValue ?? 'value provided'}`
+                            : `Value: ${entry.value}`}
+                        </div>
+                        {entry.sensitive && (
+                          <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            Verify the full value directly in your deployment settings; it is hidden here to avoid exposing
+                            secrets in the UI.
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      'not provided'
+                    )}
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Source: {entry.source}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      />
+    );
+  }
 
   if (loading) {
     return (
