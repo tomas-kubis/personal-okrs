@@ -28,16 +28,17 @@ export function useUser() {
     const loadUser = async () => {
       try {
         setLoading(true);
-        const { data, error: authError } = await supabase.auth.getUser();
-        if (authError) {
-          throw authError;
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          throw sessionError;
         }
 
-        if (!data.user) {
+        const authUser = sessionData.session?.user;
+        if (!authUser) {
           if (isMounted) {
             setCurrentUser(null);
             setUsers([]);
-            setError('Please sign in to continue.');
+            setError(null);
           }
           return;
         }
@@ -45,21 +46,24 @@ export function useUser() {
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', data.user.id)
+          .eq('id', authUser.id)
           .maybeSingle();
 
         if (isMounted) {
-          const mappedUser = buildUser(data.user, profile ?? undefined);
+          const mappedUser = buildUser(authUser, profile ?? undefined);
           setCurrentUser(mappedUser);
           setUsers([mappedUser]);
           setError(null);
         }
       } catch (err) {
-        console.error('Failed to load user data:', err);
+        const message = err instanceof Error ? err.message : 'Failed to load user data';
+        if (message !== 'Auth session missing!') {
+          console.error('Failed to load user data:', err);
+        }
         if (isMounted) {
           setCurrentUser(null);
           setUsers([]);
-          setError(err instanceof Error ? err.message : 'Failed to load user data');
+          setError(message === 'Auth session missing!' ? null : message);
         }
       } finally {
         if (isMounted) {
