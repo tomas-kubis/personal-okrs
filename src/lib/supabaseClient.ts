@@ -35,6 +35,14 @@ interface ResolvedEnvValue {
   source?: string;
 }
 
+interface EnvDebugEntry {
+  label: string;
+  value: string | null;
+  source: string;
+  maskedValue: string | null;
+  sensitive: boolean;
+}
+
 const getImportMetaEnv = () => {
   if (typeof import.meta === 'undefined') return undefined;
   return import.meta.env as ImportMetaEnv;
@@ -130,18 +138,20 @@ const maskValue = (value: string | undefined): string | null => {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 };
 
-export const supabaseEnvDebugSummary = [
+export const supabaseEnvDebugSummary: EnvDebugEntry[] = [
   {
     label: 'Supabase URL',
     value: supabaseUrl ?? null,
     source: supabaseUrlResolution.source ?? 'not resolved',
     maskedValue: maskValue(supabaseUrl ?? undefined),
+    sensitive: false,
   },
   {
     label: 'Supabase anon key',
     value: supabaseAnonKey ?? null,
     source: supabaseAnonKeyResolution.source ?? 'not resolved',
     maskedValue: maskValue(supabaseAnonKey ?? undefined),
+    sensitive: true,
   },
 ];
 

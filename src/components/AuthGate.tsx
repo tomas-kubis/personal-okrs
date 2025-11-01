@@ -69,15 +69,23 @@ export function AuthGate({ children }: AuthGateProps) {
             <p className="font-medium text-gray-700 dark:text-gray-200">Resolved configuration values:</p>
             <ul className="mt-2 space-y-1">
               {supabaseEnvDebugSummary.map(entry => (
-                <li key={entry.label} className="rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                <li
+                  key={entry.label}
+                  className="rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                >
                   <div>{entry.label}:</div>
                   <div className="mt-1">
                     {entry.value ? (
                       <>
-                        <div>Full value: {entry.value}</div>
-                        {entry.maskedValue && entry.maskedValue !== entry.value && (
-                          <div className="mt-1 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            Preview: {entry.maskedValue}
+                        <div>
+                          {entry.sensitive
+                            ? `Preview: ${entry.maskedValue ?? 'value provided'}`
+                            : `Value: ${entry.value}`}
+                        </div>
+                        {entry.sensitive && (
+                          <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            Verify the full value directly in your deployment settings; it is hidden here to avoid exposing
+                            secrets in the UI.
                           </div>
                         )}
                       </>
