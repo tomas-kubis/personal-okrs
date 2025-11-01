@@ -6,7 +6,7 @@
  */
 
 import { supabase } from '../lib/supabaseClient';
-import type { SessionContext, Period, Objective, KeyResult, WeeklyCheckIn } from '../types';
+import type { SessionContext, Period } from '../types';
 
 export interface BuildContextOptions {
   userId: string;
@@ -48,7 +48,7 @@ export async function buildContext(options: BuildContextOptions): Promise<Contex
         .single();
 
       if (!error && data) {
-        period = data;
+        period = data as Period;
       }
     } else {
       // Get active period
@@ -60,7 +60,7 @@ export async function buildContext(options: BuildContextOptions): Promise<Contex
         .single();
 
       if (!error && data) {
-        period = data;
+        period = data as Period;
       }
     }
 
@@ -177,23 +177,24 @@ export async function buildContext(options: BuildContextOptions): Promise<Contex
     }
 
     // 4. Get recent coaching sessions (for continuity)
+    // Note: This requires the context_summary column from the migration
+    // Skipping for now until migration is applied
     if (includeRecentSessions > 0) {
-      const { data: recentSessions, error: sessionError } = await supabase
-        .from('coaching_sessions')
-        .select('id, started_at, context_summary')
-        .eq('user_id', userId)
-        .order('started_at', { ascending: false })
-        .limit(includeRecentSessions);
-
-      if (!sessionError && recentSessions && recentSessions.length > 0) {
-        context.recentSessions = recentSessions.map((s) => ({
-          id: s.id,
-          startedAt: s.started_at,
-          contextSummary: s.context_summary || undefined,
-        }));
-
-        // Don't add to summary to keep it concise, but available in structured data
-      }
+      // TODO: Enable after applying migration that adds context_summary column
+      // const { data: recentSessions, error: sessionError } = await supabase
+      //   .from('coaching_sessions')
+      //   .select('id, started_at, context_summary')
+      //   .eq('user_id', userId)
+      //   .order('started_at', { ascending: false })
+      //   .limit(includeRecentSessions);
+      //
+      // if (!sessionError && recentSessions && recentSessions.length > 0) {
+      //   context.recentSessions = recentSessions.map((s) => ({
+      //     id: s.id,
+      //     startedAt: s.started_at,
+      //     contextSummary: s.context_summary || undefined,
+      //   }));
+      // }
     }
 
     const summary = summaryParts.join('');
