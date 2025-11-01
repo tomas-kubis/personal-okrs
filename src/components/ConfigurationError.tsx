@@ -3,10 +3,11 @@ import type { ReactNode } from 'react';
 interface ConfigurationErrorProps {
   title?: string;
   message: string;
+  details?: ReactNode;
   children?: ReactNode;
 }
 
-export function ConfigurationError({ title = 'Configuration required', message, children }: ConfigurationErrorProps) {
+export function ConfigurationError({ title = 'Configuration required', message, details, children }: ConfigurationErrorProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-red-200 bg-white p-8 text-center shadow-lg dark:border-red-900/40 dark:bg-gray-800">
@@ -34,6 +35,7 @@ export function ConfigurationError({ title = 'Configuration required', message, 
             Supabase dashboard.
           </p>
         </div>
+        {details}
         {children}
       </div>
     </div>
