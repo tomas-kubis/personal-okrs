@@ -16,35 +16,31 @@ const getProcessEnv = (): Record<string, string | undefined> | undefined => {
   return processRef?.env;
 };
 
-const normalizeEnvValue = (value: unknown): string | undefined => {
+export const normalizeEnvValue = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.toLowerCase() === 'undefined' || trimmed.toLowerCase() === 'null') {
-    return undefined;
-  }
-  return trimmed;
+  if (!trimmed) return undefined;
+
+  const lowerTrimmed = trimmed.toLowerCase();
+  return lowerTrimmed === 'undefined' || lowerTrimmed === 'null' ? undefined : trimmed;
+};
+
+const getImportMetaEnv = (): Record<string, unknown> | undefined => {
+  if (typeof import.meta === 'undefined') return undefined;
+  return (import.meta.env ?? {}) as Record<string, unknown>;
 };
 
 const resolveEnv = (keys: readonly string[]): string | undefined => {
   const processEnv = getProcessEnv();
-  const importMetaEnv =
-    typeof import.meta !== 'undefined' ? ((import.meta.env ?? {}) as Record<string, unknown>) : undefined;
-
-  const normalize = (value: unknown): string | undefined => {
-    if (typeof value !== 'string') return undefined;
-    const trimmed = value.trim();
-    return trimmed && trimmed.toLowerCase() !== 'undefined' && trimmed.toLowerCase() !== 'null'
-      ? trimmed
-      : undefined;
-  };
+  const importMetaEnv = getImportMetaEnv();
 
   for (const key of keys) {
-    const valueFromProcess = normalize(processEnv?.[key]);
+    const valueFromProcess = normalizeEnvValue(processEnv?.[key]);
     if (valueFromProcess) {
       return valueFromProcess;
     }
 
-    const valueFromImportMeta = normalize(importMetaEnv?.[key]);
+    const valueFromImportMeta = normalizeEnvValue(importMetaEnv?.[key]);
     if (valueFromImportMeta) {
       return valueFromImportMeta;
     }
