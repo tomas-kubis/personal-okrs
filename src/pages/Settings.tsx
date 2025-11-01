@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { User, Calendar, Trash2, Plus, Check, TestTube } from 'lucide-react';
+import { User, Calendar, Trash2, Plus, Check, TestTube, Bot, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUser } from '../hooks/useUser';
 import { usePeriods } from '../hooks/usePeriods';
 import CreatePeriodModal from '../components/CreatePeriodModal';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
+import ProviderManagement from '../components/ProviderManagement';
+import CoachPromptEditor from '../components/CoachPromptEditor';
 import { isTestingMode, getOverrideDate, setOverrideDate, useRealDate, getCurrentDate } from '../utils/dateOverride';
 import { supabase } from '../lib/supabaseClient';
 
@@ -320,6 +322,52 @@ export default function Settings() {
                 })}
               </div>
             )}
+          </div>
+        </section>
+
+        {/* AI Providers Section */}
+        <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  AI Providers
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Manage your AI provider API keys (Bring Your Own Key)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <ProviderManagement />
+          </div>
+        </section>
+
+        {/* Coach Prompt Section */}
+        <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <MessageSquare className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Coach Prompt
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Customize how your AI coach behaves and responds
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <CoachPromptEditor />
           </div>
         </section>
 

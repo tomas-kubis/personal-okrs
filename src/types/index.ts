@@ -88,18 +88,85 @@ export interface Reflection {
 // Coaching Message
 export interface CoachingMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  meta?: {
+    tokensUsed?: number;
+    model?: string;
+    [key: string]: unknown;
+  };
 }
 
-// Coaching Session
+// Provider Name
+export type ProviderName = 'openai' | 'anthropic' | 'cohere' | 'huggingface' | 'openrouter';
+
+// AI Provider
+export interface AiProvider {
+  id: string;
+  userId: string;
+  providerName: ProviderName;
+  modelName: string;
+  apiKeyEncrypted: string;   // ciphertext; never expose plaintext to client
+  isDefault: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Session Context - structured data for LLM context
+export interface SessionContext {
+  periodId?: string;
+  periodName?: string;
+  objectives?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    keyResults?: Array<{
+      id: string;
+      description: string;
+      targetValue: number;
+      unit: string;
+      currentProgress?: number;
+      status?: KeyResultStatus;
+    }>;
+  }>;
+  recentCheckIns?: Array<{
+    weekStartDate: string;
+    reflection?: Reflection;
+  }>;
+  [key: string]: unknown;
+}
+
+// Coaching Session (extended with new optional fields)
 export interface CoachingSession {
   id: string;
   user_id: string;
   messages: CoachingMessage[];
   started_at: string;
   completed_at?: string;
+  // New optional fields for backward compatibility
+  period_id?: string | null;
+  check_in_id?: string | null;
+  provider_used?: string;
+  model_used?: string;
+  status?: 'active' | 'completed' | 'abandoned';
+  context_summary?: string | null;
+  context_data?: SessionContext;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Coach Prompt
+export interface CoachPrompt {
+  id: string;
+  userId: string;
+  name: string;
+  promptText: string;
+  isDefault: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // Weekly Check-in
@@ -122,6 +189,7 @@ export interface UserPreferences {
   notifications: boolean;
   dark_mode: 'light' | 'dark' | 'system';
   coaching_style: 'supportive' | 'challenging' | 'balanced';
+  coach_prompt?: string; // Custom coach system instruction
 }
 
 // App Settings
@@ -141,3 +209,50 @@ export interface ThemeMode {
 
 // Type alias for backward compatibility during Quarter → Period migration
 export type Quarter = Period;
+
+// =============================================================================
+// LLM & Coaching Types (for future tool/workflow support)
+// =============================================================================
+
+// Tool Call - for LLM function calling
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+// Tool Definition - for registering available tools
+export interface Tool {
+  name: string;
+  description: string;
+  schema: Record<string, unknown>; // JSON Schema for the tool's parameters
+  run: (args: Record<string, unknown>, context: SessionContext) => Promise<unknown>;
+}
+
+// Chat Message (standardized for LLM providers)
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  toolCalls?: ToolCall[];
+}
+
+// Send to LLM params (for provider adapter)
+export interface SendToLLMParams {
+  providerName: ProviderName;
+  model: string;
+  apiKey: string; // plaintext (only inside Edge function)
+  messages: ChatMessage[];
+  stream?: boolean;
+  onChunk?: (delta: string) => void;
+  tools?: Tool[];
+}
+
+// LLM Response
+export interface LLMResponse {
+  content: string;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+  toolCalls?: ToolCall[];
+}
