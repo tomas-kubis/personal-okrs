@@ -2,7 +2,9 @@ name: Deploy Edge Functions
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'claude/ai-coaching-chat-mvp-**'
     paths:
       - 'supabase/functions/**'
 
