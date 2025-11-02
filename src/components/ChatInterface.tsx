@@ -64,8 +64,8 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
       if (!fetchError && existingSessions && existingSessions.length > 0) {
         // Resume existing active session
         const existingSession = existingSessions[0];
-        setSession(existingSession as CoachingSession);
-        setMessages((existingSession.messages as CoachingMessage[]) || []);
+        setSession(existingSession as unknown as CoachingSession);
+        setMessages((existingSession.messages as unknown as CoachingMessage[]) || []);
 
         if (onSessionCreated) {
           onSessionCreated(existingSession.id);
