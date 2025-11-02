@@ -308,8 +308,14 @@ async function buildSessionContext(supabaseClient: any, userId: string, periodId
  */
 async function createNewSession(supabaseClient: any, userId: string, periodId?: string) {
   try {
+    console.log('[Create Session] Starting session creation for user:', userId, 'periodId:', periodId);
+
     // Build comprehensive context
     const contextResult = await buildSessionContext(supabaseClient, userId, periodId);
+
+    console.log('[Create Session] Context result summary length:', contextResult.summary.length);
+    console.log('[Create Session] Context result summary:', contextResult.summary);
+    console.log('[Create Session] Context result data:', JSON.stringify(contextResult.data));
 
     // Get default provider
     const { data: provider } = await supabaseClient
@@ -331,6 +337,8 @@ async function createNewSession(supabaseClient: any, userId: string, periodId?: 
       );
     }
 
+    console.log('[Create Session] Using provider:', provider.provider_name, provider.model_name);
+
     // Create session with full context
     const { data: session, error: sessionError } = await supabaseClient
       .from('coaching_sessions')
@@ -349,15 +357,19 @@ async function createNewSession(supabaseClient: any, userId: string, periodId?: 
       .single();
 
     if (sessionError) {
+      console.error('[Create Session] Error inserting session:', sessionError);
       throw sessionError;
     }
+
+    console.log('[Create Session] Session created successfully:', session.id);
+    console.log('[Create Session] Session context_summary from DB:', session.context_summary);
 
     return new Response(JSON.stringify({ session }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('Error creating session:', error);
+    console.error('[Create Session] Error creating session:', error);
     throw error;
   }
 }
