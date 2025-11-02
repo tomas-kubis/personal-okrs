@@ -97,12 +97,30 @@ export default function ProviderManagement() {
           isDefault: false,
         });
       } else {
-        const error = await response.json();
-        alert(`Failed to add provider: ${error.error}`);
+        const errorText = await response.text();
+        let errorMessage = 'Failed to add provider';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+
+        // Check if it's a 404 (function not deployed)
+        if (response.status === 404) {
+          alert('⚠️ Edge Function not deployed!\n\nThe Supabase Edge Function needs to be deployed first.\n\nRun:\nsupabase functions deploy providers');
+        } else {
+          alert(`Failed to add provider: ${errorMessage}`);
+        }
       }
     } catch (error) {
       console.error('Error adding provider:', error);
-      alert('Failed to add provider');
+      // Check if it's a network error
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        alert('⚠️ Cannot reach Edge Function.\n\nMake sure:\n1. Edge Functions are deployed\n2. VITE_SUPABASE_URL is correct\n\nRun: supabase functions deploy providers');
+      } else {
+        alert('Failed to add provider: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
     }
   };
 
