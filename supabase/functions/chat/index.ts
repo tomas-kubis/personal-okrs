@@ -399,28 +399,40 @@ async function sendMessage(
 
   // Build messages array
   const messages: ChatMessage[] = [];
-
-  // Add system message (only once at start)
   const existingMessages = (session.messages as any[]) || [];
-  if (existingMessages.length === 0) {
-    // Use comprehensive context summary for first message
-    const contextInfo = session.context_summary
-      ? `\n\n## User Context\n${session.context_summary}`
-      : '';
 
-    messages.push({
-      role: 'system',
-      content: coachPrompt + contextInfo,
-    });
+  // ALWAYS include system message with context (for both new and resumed sessions)
+  // If session doesn't have context_summary (old session), rebuild it now
+  let contextInfo = '';
+  if (session.context_summary) {
+    contextInfo = `\n\n## User Context\n${session.context_summary}`;
   } else {
-    // Include existing conversation
-    for (const msg of existingMessages) {
-      if (msg.role !== 'system') {
-        messages.push({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        });
-      }
+    // Rebuild context for old sessions
+    const contextResult = await buildSessionContext(supabaseClient, userId, session.period_id);
+    contextInfo = `\n\n## User Context\n${contextResult.summary}`;
+
+    // Update session with context for future messages
+    await supabaseClient
+      .from('coaching_sessions')
+      .update({
+        context_summary: contextResult.summary,
+        context_data: contextResult.data,
+      })
+      .eq('id', session.id);
+  }
+
+  messages.push({
+    role: 'system',
+    content: coachPrompt + contextInfo,
+  });
+
+  // Include existing conversation history (skip old system messages to avoid duplicates)
+  for (const msg of existingMessages) {
+    if (msg.role !== 'system') {
+      messages.push({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      });
     }
   }
 
