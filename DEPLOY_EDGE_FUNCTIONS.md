@@ -1,6 +1,72 @@
 # Deploy Edge Functions to Supabase
 
-## Quick Deploy
+You can deploy Edge Functions in two ways:
+1. **Via Supabase Dashboard** (Recommended - easiest, no CLI needed)
+2. **Via Supabase CLI** (Advanced - for development workflow)
+
+---
+
+## Option 1: Deploy via Supabase Dashboard (Recommended)
+
+This method uses the standalone versions that don't require CLI or folder structure.
+
+### Step 1: Generate Encryption Key
+
+First, generate a secure encryption key. Choose one method:
+
+**Using OpenSSL** (Mac/Linux):
+```bash
+openssl rand -base64 32
+```
+
+**Using Node.js**:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+**Using Online Tool**:
+Visit https://generate-random.org/base64-string-generator (set length to 44)
+
+**Copy the generated key** - you'll need it in the next step.
+
+### Step 2: Set Environment Variable
+
+1. Go to https://supabase.com/dashboard/project/YOUR-PROJECT-REF/settings/functions
+2. Click **"Add new secret"**
+3. Name: `ENCRYPTION_KEY`
+4. Value: Paste your generated key from Step 1
+5. Click **"Save"**
+
+### Step 3: Deploy Chat Function
+
+1. Go to https://supabase.com/dashboard/project/YOUR-PROJECT-REF/functions
+2. Click **"Create a new function"**
+3. Name: `chat`
+4. Copy **the entire contents** of `supabase/functions/chat-standalone.ts`
+5. Paste into the editor
+6. Click **"Deploy"**
+
+### Step 4: Deploy Providers Function
+
+1. Still on the Edge Functions page, click **"Create a new function"**
+2. Name: `providers`
+3. Copy **the entire contents** of `supabase/functions/providers-standalone.ts`
+4. Paste into the editor
+5. Click **"Deploy"**
+
+### Step 5: Verify Deployment
+
+You should see both functions listed as **Active**:
+- ✅ chat
+- ✅ providers
+
+**Done!** Your Edge Functions are now deployed and ready to use.
+
+---
+
+## Option 2: Deploy via Supabase CLI
+
+### Quick Deploy
 
 ```bash
 # Install Supabase CLI (if not already installed)
