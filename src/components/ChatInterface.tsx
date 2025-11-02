@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, MessageSquare, AlertCircle, Info, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Loader2, MessageSquare, AlertCircle, Info, RotateCcw, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import type { CoachingMessage, CoachingSession } from '../types';
 
@@ -64,8 +64,8 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
       if (!fetchError && existingSessions && existingSessions.length > 0) {
         // Resume existing active session
         const existingSession = existingSessions[0];
-        setSession(existingSession);
-        setMessages(existingSession.messages || []);
+        setSession(existingSession as CoachingSession);
+        setMessages((existingSession.messages as CoachingMessage[]) || []);
 
         if (onSessionCreated) {
           onSessionCreated(existingSession.id);
