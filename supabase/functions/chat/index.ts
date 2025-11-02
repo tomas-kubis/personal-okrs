@@ -90,28 +90,174 @@ serve(async (req) => {
 });
 
 /**
- * Create a new coaching session with context
+ * Build comprehensive context for coaching session
+ */
+async function buildSessionContext(supabaseClient: any, userId: string, periodId?: string) {
+  const context: any = {};
+  const summaryParts: string[] = [];
+
+  // 1. Get period info
+  let period: any = null;
+  if (periodId) {
+    const { data } = await supabaseClient
+      .from('periods')
+      .select('*')
+      .eq('id', periodId)
+      .eq('user_id', userId)
+      .single();
+    period = data;
+  } else {
+    const { data } = await supabaseClient
+      .from('periods')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .single();
+    period = data;
+  }
+
+  if (period) {
+    context.periodId = period.id;
+    context.periodName = period.name;
+    summaryParts.push(`Working on: ${period.name} (${new Date(period.start_date).toLocaleDateString()} - ${new Date(period.end_date).toLocaleDateString()})`);
+  }
+
+  // 2. Get objectives with key results and progress history
+  if (period) {
+    const { data: objectives } = await supabaseClient
+      .from('objectives')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('period_id', period.id)
+      .order('created_at', { ascending: true });
+
+    if (objectives && objectives.length > 0) {
+      const objectivesWithKRs = await Promise.all(
+        objectives.map(async (obj: any) => {
+          const { data: keyResults } = await supabaseClient
+            .from('key_results_with_progress')
+            .select('*')
+            .eq('objective_id', obj.id)
+            .order('created_at', { ascending: true });
+
+          const krsWithProgress = (keyResults || []).map((kr: any) => {
+            const weeklyProgress = (kr.weekly_progress as any[]) || [];
+            const latestProgress = weeklyProgress.length > 0
+              ? weeklyProgress[weeklyProgress.length - 1]?.value
+              : 0;
+
+            // Calculate progress trend (last 4 weeks)
+            const recentWeeks = weeklyProgress.slice(-4);
+            const trend = recentWeeks.length >= 2
+              ? recentWeeks[recentWeeks.length - 1]?.value - recentWeeks[0]?.value
+              : 0;
+
+            return {
+              description: kr.description,
+              targetValue: kr.target_value,
+              unit: kr.unit,
+              currentProgress: latestProgress,
+              status: kr.status,
+              progressHistory: recentWeeks,
+              trend: trend > 0 ? 'improving' : trend < 0 ? 'declining' : 'stable',
+            };
+          });
+
+          return {
+            title: obj.title,
+            description: obj.description,
+            keyResults: krsWithProgress,
+          };
+        })
+      );
+
+      context.objectives = objectivesWithKRs;
+
+      // Add detailed objective status to summary
+      summaryParts.push('\n\nCurrent Objectives:');
+      objectivesWithKRs.forEach((obj: any) => {
+        summaryParts.push(`\n- ${obj.title}${obj.description ? ': ' + obj.description : ''}`);
+        obj.keyResults?.forEach((kr: any) => {
+          const progress = kr.currentProgress || 0;
+          const percentage = kr.targetValue > 0 ? Math.round((progress / kr.targetValue) * 100) : 0;
+          const trendEmoji = kr.trend === 'improving' ? '📈' : kr.trend === 'declining' ? '📉' : '➡️';
+          summaryParts.push(`  ${trendEmoji} ${kr.description}: ${progress}/${kr.targetValue} ${kr.unit} (${percentage}%) - ${kr.status || 'not set'}`);
+        });
+      });
+    }
+  }
+
+  // 3. Get recent check-ins with reflections
+  if (period) {
+    const { data: checkIns } = await supabaseClient
+      .from('weekly_check_ins')
+      .select('week_start_date, reflection, completed_at')
+      .eq('user_id', userId)
+      .eq('period_id', period.id)
+      .order('week_start_date', { ascending: false })
+      .limit(3);
+
+    if (checkIns && checkIns.length > 0) {
+      context.recentCheckIns = checkIns;
+
+      summaryParts.push('\n\nRecent Reflections:');
+      checkIns.forEach((ci: any) => {
+        const weekDate = new Date(ci.week_start_date).toLocaleDateString();
+        const reflection = ci.reflection as any;
+        if (reflection) {
+          summaryParts.push(`\nWeek of ${weekDate}:`);
+          if (reflection.what_went_well) summaryParts.push(`  ✅ ${reflection.what_went_well}`);
+          if (reflection.what_didnt_go_well) summaryParts.push(`  ⚠️ ${reflection.what_didnt_go_well}`);
+          if (reflection.what_will_i_change) summaryParts.push(`  🔄 ${reflection.what_will_i_change}`);
+        }
+      });
+    }
+  }
+
+  // 4. Get previous coaching conversations
+  const { data: recentSessions } = await supabaseClient
+    .from('coaching_sessions')
+    .select('id, started_at, messages')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .order('started_at', { ascending: false })
+    .limit(2);
+
+  if (recentSessions && recentSessions.length > 0) {
+    const previousConversations: string[] = [];
+    recentSessions.forEach((s: any) => {
+      const messages = s.messages as any[];
+      if (messages && messages.length > 0) {
+        const date = new Date(s.started_at).toLocaleDateString();
+        const userMessages = messages.filter((m: any) => m.role === 'user').slice(0, 2);
+        if (userMessages.length > 0) {
+          previousConversations.push(`${date}: ${userMessages.map((m: any) => m.content).join('; ')}`);
+        }
+      }
+    });
+
+    if (previousConversations.length > 0) {
+      context.previousChats = previousConversations;
+      summaryParts.push('\n\nPrevious coaching topics:');
+      previousConversations.forEach((conv: string) => {
+        summaryParts.push(`- ${conv}`);
+      });
+    }
+  }
+
+  return {
+    summary: summaryParts.join('\n'),
+    data: context,
+  };
+}
+
+/**
+ * Create a new coaching session with full context
  */
 async function createNewSession(supabaseClient: any, userId: string, periodId?: string) {
   try {
-    // Build context summary (simplified version for Edge function)
-    let contextSummary = 'New coaching session';
-    const contextData: any = {};
-
-    if (periodId) {
-      const { data: period } = await supabaseClient
-        .from('periods')
-        .select('*')
-        .eq('id', periodId)
-        .eq('user_id', userId)
-        .single();
-
-      if (period) {
-        contextData.periodId = period.id;
-        contextData.periodName = period.name;
-        contextSummary = `Coaching session for ${period.name}`;
-      }
-    }
+    // Build comprehensive context
+    const contextResult = await buildSessionContext(supabaseClient, userId, periodId);
 
     // Get default provider
     const { data: provider } = await supabaseClient
@@ -133,7 +279,7 @@ async function createNewSession(supabaseClient: any, userId: string, periodId?: 
       );
     }
 
-    // Create session
+    // Create session with full context
     const { data: session, error: sessionError } = await supabaseClient
       .from('coaching_sessions')
       .insert({
@@ -141,11 +287,11 @@ async function createNewSession(supabaseClient: any, userId: string, periodId?: 
         messages: [],
         started_at: new Date().toISOString(),
         status: 'active',
-        period_id: periodId || null,
+        period_id: contextResult.data.periodId || null,
         provider_used: provider.provider_name,
         model_used: provider.model_name,
-        context_summary: contextSummary,
-        context_data: contextData,
+        context_summary: contextResult.summary,
+        context_data: contextResult.data,
       })
       .select()
       .single();
@@ -257,11 +403,10 @@ async function sendMessage(
   // Add system message (only once at start)
   const existingMessages = (session.messages as any[]) || [];
   if (existingMessages.length === 0) {
-    // Build context summary for system message
-    let contextInfo = '';
-    if (session.context_data?.periodName) {
-      contextInfo = `\n\nContext: The user is working on "${session.context_data.periodName}".`;
-    }
+    // Use comprehensive context summary for first message
+    const contextInfo = session.context_summary
+      ? `\n\n## User Context\n${session.context_summary}`
+      : '';
 
     messages.push({
       role: 'system',
