@@ -2,7 +2,7 @@
  * Chat Edge Function
  *
  * Handles AI coaching chat sessions with support for multiple LLM providers
- * Auto-deployed via GitHub Actions on push to main or feature branches
+ * Features: Context-aware coaching, session persistence, progress tracking
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
