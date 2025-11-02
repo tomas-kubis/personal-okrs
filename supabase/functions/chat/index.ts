@@ -1,8 +1,10 @@
 /**
- * Chat Edge Function
+ * Chat Edge Function v2.0
  *
  * Handles AI coaching chat sessions with support for multiple LLM providers
  * Features: Context-aware coaching, session persistence, progress tracking
+ *
+ * Version: 2024-11-02 - Full context building with comprehensive logging
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
