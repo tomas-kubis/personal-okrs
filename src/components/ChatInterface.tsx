@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
+import { Send, Loader2, MessageSquare, AlertCircle, Info, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import type { CoachingMessage, CoachingSession } from '../types';
 
@@ -21,6 +21,7 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
+  const [showContext, setShowContext] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -45,7 +46,34 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
         return;
       }
 
-      // Create new session
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('Please log in to use the coaching chat.');
+        return;
+      }
+
+      // First, check if there's an active session we can resume
+      const { data: existingSessions, error: fetchError } = await supabase
+        .from('coaching_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false })
+        .limit(1);
+
+      if (!fetchError && existingSessions && existingSessions.length > 0) {
+        // Resume existing active session
+        const existingSession = existingSessions[0];
+        setSession(existingSession);
+        setMessages(existingSession.messages || []);
+
+        if (onSessionCreated) {
+          onSessionCreated(existingSession.id);
+        }
+        return;
+      }
+
+      // No active session found, create a new one
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
         {
@@ -142,6 +170,31 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
     }
   };
 
+  const startNewSession = async () => {
+    if (!confirm('Start a new coaching session? Your current conversation will be saved.')) {
+      return;
+    }
+
+    try {
+      // Mark current session as completed
+      if (session) {
+        await supabase
+          .from('coaching_sessions')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', session.id);
+      }
+
+      // Reset state and initialize new session
+      setSession(null);
+      setMessages([]);
+      setError(null);
+      await initializeSession();
+    } catch (err) {
+      console.error('Error starting new session:', err);
+      setError('Failed to start new session');
+    }
+  };
+
   if (initializing) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -176,15 +229,54 @@ export default function ChatInterface({ periodId, onSessionCreated }: ChatInterf
   return (
     <div className="flex flex-col h-[600px] bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
       {/* Header */}
-      <div className="flex items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <MessageSquare className="w-5 h-5 text-blue-500 mr-2" />
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          AI Coach
-        </h2>
-        {session?.provider_used && (
-          <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
-            {session.provider_used} · {session.model_used}
-          </span>
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center px-4 py-3">
+          <MessageSquare className="w-5 h-5 text-blue-500 mr-2" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            AI Coach
+          </h2>
+          {session?.provider_used && (
+            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+              {session.provider_used} · {session.model_used}
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowContext(!showContext)}
+              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              title="View context"
+            >
+              {showContext ? <ChevronUp className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={startNewSession}
+              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              title="Start new session"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Context Panel */}
+        {showContext && session?.context_summary && (
+          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 flex items-center">
+                <Info className="w-4 h-4 mr-1" />
+                Context Provided to AI
+              </h3>
+              <button
+                onClick={() => setShowContext(false)}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-xs text-blue-800 dark:text-blue-300 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white dark:bg-gray-800 p-3 rounded border border-blue-200 dark:border-blue-700">
+              {session.context_summary}
+            </div>
+          </div>
         )}
       </div>
 
