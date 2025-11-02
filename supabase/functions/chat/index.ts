@@ -96,49 +96,77 @@ async function buildSessionContext(supabaseClient: any, userId: string, periodId
   const context: any = {};
   const summaryParts: string[] = [];
 
-  // 1. Get period info
-  let period: any = null;
-  if (periodId) {
-    const { data } = await supabaseClient
-      .from('periods')
-      .select('*')
-      .eq('id', periodId)
-      .eq('user_id', userId)
-      .single();
-    period = data;
-  } else {
-    const { data } = await supabaseClient
-      .from('periods')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .single();
-    period = data;
-  }
+  try {
+    console.log('[Context Builder] Starting context build for user:', userId, 'periodId:', periodId);
 
-  if (period) {
-    context.periodId = period.id;
-    context.periodName = period.name;
-    summaryParts.push(`Working on: ${period.name} (${new Date(period.start_date).toLocaleDateString()} - ${new Date(period.end_date).toLocaleDateString()})`);
-  }
+    // 1. Get period info
+    let period: any = null;
+    if (periodId) {
+      const { data, error } = await supabaseClient
+        .from('periods')
+        .select('*')
+        .eq('id', periodId)
+        .eq('user_id', userId)
+        .single();
 
-  // 2. Get objectives with key results and progress history
-  if (period) {
-    const { data: objectives } = await supabaseClient
+      if (error) {
+        console.error('[Context Builder] Error fetching period by ID:', error);
+      }
+      period = data;
+    } else {
+      const { data, error } = await supabaseClient
+        .from('periods')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .single();
+
+      if (error) {
+        console.error('[Context Builder] Error fetching active period:', error);
+      }
+      period = data;
+    }
+
+    console.log('[Context Builder] Found period:', period ? period.name : 'none');
+
+    if (period) {
+      context.periodId = period.id;
+      context.periodName = period.name;
+      summaryParts.push(`Working on: ${period.name} (${new Date(period.start_date).toLocaleDateString()} - ${new Date(period.end_date).toLocaleDateString()})`);
+    } else {
+      summaryParts.push('No active period set. Please create a period first.');
+      return {
+        summary: summaryParts.join('\n'),
+        data: context,
+      };
+    }
+
+    // 2. Get objectives with key results and progress history
+    const { data: objectives, error: objError } = await supabaseClient
       .from('objectives')
       .select('*')
       .eq('user_id', userId)
       .eq('period_id', period.id)
       .order('created_at', { ascending: true });
 
+    if (objError) {
+      console.error('[Context Builder] Error fetching objectives:', objError);
+    }
+
+    console.log('[Context Builder] Found objectives:', objectives ? objectives.length : 0);
+
     if (objectives && objectives.length > 0) {
       const objectivesWithKRs = await Promise.all(
         objectives.map(async (obj: any) => {
-          const { data: keyResults } = await supabaseClient
+          const { data: keyResults, error: krError } = await supabaseClient
             .from('key_results_with_progress')
             .select('*')
             .eq('objective_id', obj.id)
             .order('created_at', { ascending: true });
+
+          if (krError) {
+            console.error('[Context Builder] Error fetching key results for objective', obj.id, ':', krError);
+          }
 
           const krsWithProgress = (keyResults || []).map((kr: any) => {
             const weeklyProgress = (kr.weekly_progress as any[]) || [];
@@ -184,18 +212,26 @@ async function buildSessionContext(supabaseClient: any, userId: string, periodId
           summaryParts.push(`  ${trendEmoji} ${kr.description}: ${progress}/${kr.targetValue} ${kr.unit} (${percentage}%) - ${kr.status || 'not set'}`);
         });
       });
-    }
-  }
 
-  // 3. Get recent check-ins with reflections
-  if (period) {
-    const { data: checkIns } = await supabaseClient
+      console.log('[Context Builder] Built objective context for', objectivesWithKRs.length, 'objectives');
+    } else {
+      summaryParts.push('\n\nNo objectives set yet. Create objectives to track your progress.');
+    }
+
+    // 3. Get recent check-ins with reflections
+    const { data: checkIns, error: checkInError } = await supabaseClient
       .from('weekly_check_ins')
       .select('week_start_date, reflection, completed_at')
       .eq('user_id', userId)
       .eq('period_id', period.id)
       .order('week_start_date', { ascending: false })
       .limit(3);
+
+    if (checkInError) {
+      console.error('[Context Builder] Error fetching check-ins:', checkInError);
+    }
+
+    console.log('[Context Builder] Found check-ins:', checkIns ? checkIns.length : 0);
 
     if (checkIns && checkIns.length > 0) {
       context.recentCheckIns = checkIns;
@@ -212,43 +248,59 @@ async function buildSessionContext(supabaseClient: any, userId: string, periodId
         }
       });
     }
-  }
 
-  // 4. Get previous coaching conversations
-  const { data: recentSessions } = await supabaseClient
-    .from('coaching_sessions')
-    .select('id, started_at, messages')
-    .eq('user_id', userId)
-    .eq('status', 'completed')
-    .order('started_at', { ascending: false })
-    .limit(2);
+    // 4. Get previous coaching conversations
+    const { data: recentSessions, error: sessionsError } = await supabaseClient
+      .from('coaching_sessions')
+      .select('id, started_at, messages')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: false })
+      .limit(2);
 
-  if (recentSessions && recentSessions.length > 0) {
-    const previousConversations: string[] = [];
-    recentSessions.forEach((s: any) => {
-      const messages = s.messages as any[];
-      if (messages && messages.length > 0) {
-        const date = new Date(s.started_at).toLocaleDateString();
-        const userMessages = messages.filter((m: any) => m.role === 'user').slice(0, 2);
-        if (userMessages.length > 0) {
-          previousConversations.push(`${date}: ${userMessages.map((m: any) => m.content).join('; ')}`);
-        }
-      }
-    });
-
-    if (previousConversations.length > 0) {
-      context.previousChats = previousConversations;
-      summaryParts.push('\n\nPrevious coaching topics:');
-      previousConversations.forEach((conv: string) => {
-        summaryParts.push(`- ${conv}`);
-      });
+    if (sessionsError) {
+      console.error('[Context Builder] Error fetching previous sessions:', sessionsError);
     }
-  }
 
-  return {
-    summary: summaryParts.join('\n'),
-    data: context,
-  };
+    console.log('[Context Builder] Found previous sessions:', recentSessions ? recentSessions.length : 0);
+
+    if (recentSessions && recentSessions.length > 0) {
+      const previousConversations: string[] = [];
+      recentSessions.forEach((s: any) => {
+        const messages = s.messages as any[];
+        if (messages && messages.length > 0) {
+          const date = new Date(s.started_at).toLocaleDateString();
+          const userMessages = messages.filter((m: any) => m.role === 'user').slice(0, 2);
+          if (userMessages.length > 0) {
+            previousConversations.push(`${date}: ${userMessages.map((m: any) => m.content).join('; ')}`);
+          }
+        }
+      });
+
+      if (previousConversations.length > 0) {
+        context.previousChats = previousConversations;
+        summaryParts.push('\n\nPrevious coaching topics:');
+        previousConversations.forEach((conv: string) => {
+          summaryParts.push(`- ${conv}`);
+        });
+      }
+    }
+
+    const finalSummary = summaryParts.join('\n');
+    console.log('[Context Builder] Final summary length:', finalSummary.length, 'characters');
+    console.log('[Context Builder] Summary preview:', finalSummary.substring(0, 200));
+
+    return {
+      summary: finalSummary,
+      data: context,
+    };
+  } catch (error) {
+    console.error('[Context Builder] Unexpected error building context:', error);
+    return {
+      summary: 'Error building context. Please try again.',
+      data: {},
+    };
+  }
 }
 
 /**
