@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { startOfWeek, format } from 'date-fns';
