@@ -17,8 +17,6 @@ import UpdateProgressModal from '../components/UpdateProgressModal';
 import KeyResultForm from '../components/KeyResultForm';
 import type { KeyResult, Objective, KeyResultStatus } from '../types';
 
-// Local storage key for draft
-const DRAFT_KEY = 'checkin-draft';
 
 type ModalState =
   | { type: 'none' }
@@ -93,34 +91,7 @@ export default function CheckIn() {
     })
     .filter((kr): kr is KeyResult & { objective: Objective } => kr !== null);
 
-  // Load draft from localStorage
-  useEffect(() => {
-    if (!isCompleted) {
-      const draft = localStorage.getItem(DRAFT_KEY);
-      if (draft) {
-        try {
-          const parsed = JSON.parse(draft);
-          setWhatWentWell(parsed.whatWentWell || '');
-          setWhatDidntGoWell(parsed.whatDidntGoWell || '');
-          setWhatWillIChange(parsed.whatWillIChange || '');
-        } catch (e) {
-          console.error('Failed to parse draft:', e);
-        }
-      }
-    }
-  }, [isCompleted]);
-
-  // Auto-save draft to localStorage
-  useEffect(() => {
-    if (!isCompleted) {
-      const draft = {
-        whatWentWell,
-        whatDidntGoWell,
-        whatWillIChange,
-      };
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    }
-  }, [whatWentWell, whatDidntGoWell, whatWillIChange, isCompleted]);
+  // Note: Draft saving is handled by ReflectionWithHistory component
 
   const handleUpdateProgress = async (newValue: number, statusOverride?: KeyResultStatus, statusOverrideReason?: string) => {
     if (modalState.type === 'kr-update') {
@@ -220,7 +191,6 @@ export default function CheckIn() {
         },
       });
 
-      localStorage.removeItem(DRAFT_KEY);
       if (currentUser) {
         clearReflectionDraft(currentUser.id, weekStartDate);
       }
