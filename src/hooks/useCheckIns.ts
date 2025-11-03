@@ -148,7 +148,7 @@ const toJson = (value: unknown): Json => value as unknown as Json;
       }
 
       if (checkIn.progress_updates?.length) {
-        await supabase.from('check_in_progress_updates').insert(
+        const { error: progressError } = await supabase.from('check_in_progress_updates').insert(
           checkIn.progress_updates.map(pu => ({
             check_in_id: inserted.id,
             key_result_id: pu.key_result_id,
@@ -157,6 +157,10 @@ const toJson = (value: unknown): Json => value as unknown as Json;
             notes: pu.notes ?? null,
           }))
         );
+
+        if (progressError) {
+          throw new Error(`Failed to save progress updates: ${progressError.message}`);
+        }
       }
 
       const { data: fullRow, error: fetchError } = await supabase
